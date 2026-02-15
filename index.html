@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Road Rush - 3D Driving Game</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+  canvas { display: block; }
+
+  #ui-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 10;
+  }
+
+  /* HUD */
+  #hud {
+    display: none; position: absolute; top: 0; left: 0; width: 100%; padding: 20px;
+  }
+  #hud-left { position: absolute; top: 20px; left: 20px; }
+  #hud-right { position: absolute; top: 20px; right: 20px; text-align: right; }
+  .hud-label { color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase; letter-spacing: 2px; }
+  .hud-value { color: #fff; font-size: 32px; font-weight: 700; line-height: 1.2; }
+  .hud-value.speed { color: #4fc3f7; }
+  .hud-value.score { color: #fff176; }
+  #hud-center {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center;
+  }
+  .hud-multiplier { color: #ff8a65; font-size: 22px; font-weight: 700; }
+
+  /* Police warning */
+  #police-warning {
+    display: none; position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%);
+    padding: 10px 30px; border-radius: 8px;
+    font-size: 18px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+    animation: flashWarn 0.5s infinite;
+  }
+  @keyframes flashWarn {
+    0%, 100% { background: rgba(255,0,0,0.8); color: #fff; }
+    50% { background: rgba(0,100,255,0.8); color: #fff; }
+  }
+
+  /* Speed up warning */
+  #speed-warning {
+    display: none; position: absolute; bottom: 170px; left: 50%; transform: translateX(-50%);
+    color: #ff5252; font-size: 16px; font-weight: 700; letter-spacing: 1px;
+    text-shadow: 0 0 10px rgba(255,0,0,0.5);
+    animation: pulse 0.8s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Screens */
+  .screen {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 20; pointer-events: all; transition: opacity 0.5s;
+  }
+  .screen.hidden { opacity: 0; pointer-events: none; }
+
+  #start-screen {
+    background: linear-gradient(135deg, #0d1b2a 0%, #1b2838 50%, #0d1b2a 100%);
+  }
+  #start-screen h1 {
+    font-size: 72px; font-weight: 900; color: #fff;
+    text-shadow: 0 0 40px rgba(79,195,247,0.5), 0 4px 8px rgba(0,0,0,0.5);
+    margin-bottom: 10px; letter-spacing: 4px;
+  }
+  #start-screen .subtitle {
+    color: rgba(255,255,255,0.5); font-size: 16px; letter-spacing: 6px;
+    text-transform: uppercase; margin-bottom: 50px;
+  }
+  .btn {
+    padding: 16px 60px; font-size: 20px; font-weight: 700; border: none; border-radius: 50px;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 3px;
+    transition: all 0.3s; pointer-events: all;
+  }
+  .btn-start {
+    background: linear-gradient(135deg, #4fc3f7, #0288d1);
+    color: #fff; box-shadow: 0 4px 20px rgba(79,195,247,0.4);
+  }
+  .btn-start:hover { transform: scale(1.05); box-shadow: 0 6px 30px rgba(79,195,247,0.6); }
+  .btn-restart {
+    background: linear-gradient(135deg, #ff8a65, #e64a19);
+    color: #fff; box-shadow: 0 4px 20px rgba(255,138,101,0.4);
+  }
+  .btn-restart:hover { transform: scale(1.05); box-shadow: 0 6px 30px rgba(255,138,101,0.6); }
+
+  .controls-info {
+    margin-top: 40px; color: rgba(255,255,255,0.4); font-size: 13px; text-align: center; line-height: 2;
+  }
+  .controls-info kbd {
+    background: rgba(255,255,255,0.1); padding: 3px 10px; border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.2); font-family: inherit;
+  }
+
+  #game-over-screen {
+    background: rgba(10,10,20,0.92);
+  }
+  #game-over-screen h1 {
+    font-size: 56px; font-weight: 900; color: #ff5252; margin-bottom: 10px;
+    text-shadow: 0 0 30px rgba(255,82,82,0.5);
+  }
+  #game-over-screen .cause {
+    color: rgba(255,255,255,0.5); font-size: 16px; margin-bottom: 40px;
+    letter-spacing: 2px; text-transform: uppercase;
+  }
+  .final-stats {
+    display: flex; gap: 50px; margin-bottom: 40px;
+  }
+  .stat-box {
+    text-align: center;
+  }
+  .stat-box .stat-label { color: rgba(255,255,255,0.4); font-size: 12px; text-transform: uppercase; letter-spacing: 2px; }
+  .stat-box .stat-value { color: #fff; font-size: 42px; font-weight: 700; }
+  .stat-box .stat-value.gold { color: #fff176; }
+
+  /* Mobile controls */
+  #mobile-controls {
+    display: none; position: absolute; bottom: 20px; left: 0; width: 100%;
+    padding: 0 20px; pointer-events: all;
+  }
+  .mobile-btn-row { display: flex; justify-content: space-between; align-items: center; }
+  .mobile-btn {
+    width: 70px; height: 70px; border-radius: 50%;
+    background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; color: rgba(255,255,255,0.8); user-select: none;
+    -webkit-user-select: none; touch-action: manipulation;
+  }
+  .mobile-btn:active { background: rgba(255,255,255,0.3); }
+
+  @media (pointer: coarse) {
+    #mobile-controls { display: block; }
+  }
+  @media (max-width: 600px) {
+    #start-screen h1 { font-size: 40px; }
+    .hud-value { font-size: 24px; }
+    .final-stats { gap: 25px; }
+    .stat-box .stat-value { font-size: 30px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Start Screen -->
+<div id="start-screen" class="screen">
+  <h1>ROAD RUSH</h1>
+  <div class="subtitle">Outrun the Law</div>
+  <button class="btn btn-start" id="btn-start">Start</button>
+  <div class="controls-info">
+    <kbd>W</kbd> / <kbd>&uarr;</kbd> Accelerate &nbsp;&nbsp;
+    <kbd>S</kbd> / <kbd>&darr;</kbd> Brake<br>
+    <kbd>A</kbd> / <kbd>&lArr;</kbd> Steer Left &nbsp;&nbsp;
+    <kbd>D</kbd> / <kbd>&rArr;</kbd> Steer Right
+  </div>
+</div>
+
+<!-- Game Over Screen -->
+<div id="game-over-screen" class="screen hidden">
+  <h1>BUSTED</h1>
+  <div class="cause" id="game-over-cause">Crashed into traffic</div>
+  <div class="final-stats">
+    <div class="stat-box">
+      <div class="stat-label">Distance</div>
+      <div class="stat-value" id="final-distance">0</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Top Speed</div>
+      <div class="stat-value" id="final-speed">0</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Score</div>
+      <div class="stat-value gold" id="final-score">0</div>
+    </div>
+  </div>
+  <button class="btn btn-restart" id="btn-restart">Try Again</button>
+</div>
+
+<!-- HUD -->
+<div id="ui-overlay">
+  <div id="hud">
+    <div id="hud-left">
+      <div class="hud-label">Speed</div>
+      <div class="hud-value speed" id="hud-speed">0 km/h</div>
+    </div>
+    <div id="hud-center">
+      <div class="hud-multiplier" id="hud-multiplier"></div>
+    </div>
+    <div id="hud-right">
+      <div class="hud-label">Score</div>
+      <div class="hud-value score" id="hud-score">0</div>
+      <div class="hud-label" style="margin-top:8px">Distance</div>
+      <div class="hud-value" id="hud-distance" style="font-size:22px">0 m</div>
+    </div>
+  </div>
+  <div id="police-warning">POLICE ON YOUR TAIL</div>
+  <div id="speed-warning">SPEED UP OR GET BUSTED!</div>
+  <div id="mobile-controls">
+    <div class="mobile-btn-row">
+      <div class="mobile-btn" id="m-left">&#9664;</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="mobile-btn" id="m-up">&#9650;</div>
+        <div class="mobile-btn" id="m-down">&#9660;</div>
+      </div>
+      <div class="mobile-btn" id="m-right">&#9654;</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ===========================
+// CONFIGURATION
+// ===========================
+const CONFIG = {
+  // Road
+  roadWidth: 9,
+  laneWidth: 4.5,
+  segmentLength: 80,
+  visibleSegments: 7,
+  shoulderWidth: 2,
+
+  // Player
+  playerLaneX: 2.25,
+  playerStartSpeed: 80,
+  playerMaxSpeed: 280,
+  playerAcceleration: 40,
+  playerBrakeForce: 60,
+  playerSteerSpeed: 8,
+  playerMinX: -6,
+  playerMaxX: 6,
+
+  // Traffic
+  trafficBaseInterval: 1.8,
+  trafficMinInterval: 0.35,
+  oncomingBaseInterval: 2.5,
+  oncomingMinInterval: 0.4,
+  sameDirectionSpeedRatio: 0.5,
+  oncomingSpeedRatio: 0.8,
+  trafficSpawnDistance: 250,
+  trafficDespawnDistance: 60,
+
+  // Police
+  policeSpeedThreshold: 70,
+  policeWarningTime: 4,
+  policeSpawnTime: 7,
+  policeCatchUpSpeed: 15,
+  policeCatchDistance: 3,
+
+  // Difficulty
+  difficultyRampTime: 120,
+
+  // Scoring
+  speedScoreMultiplier: 0.01,
+  nearMissDistance: 2.5,
+  nearMissBonus: 50,
+
+  // Physics
+  carLength: 4.2,
+  carWidth: 2.0,
+  carHeight: 1.4,
+};
+
+// ===========================
+// GAME STATE
+// ===========================
+const state = {
+  gameState: 'start', // start, playing, gameover
+  playerX: CONFIG.playerLaneX,
+  playerZ: 0,
+  playerSpeed: CONFIG.playerStartSpeed,
+  topSpeed: 0,
+  distance: 0,
+  score: 0,
+  multiplier: 1,
+  multiplierTimer: 0,
+  nearMissCombo: 0,
+
+  // Traffic
+  trafficCars: [],
+  sameTrafficTimer: 0,
+  oncomingTrafficTimer: 0,
+
+  // Police
+  policeActive: false,
+  policeWarning: false,
+  policeZ: 0,
+  policeLights: 0,
+  slowTimer: 0,
+  policeSpawned: false,
+
+  // Difficulty
+  elapsedTime: 0,
+  difficultyLevel: 0,
+
+  // Input
+  keys: { left: false, right: false, up: false, down: false },
+
+  // Road segments
+  roadSegments: [],
+  sceneryObjects: [],
+
+  // Delta
+  lastTime: 0,
+};
+
+// ===========================
+// THREE.JS SETUP
+// ===========================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB);
+scene.fog = new THREE.Fog(0x87CEEB, 100, 350);
+
+const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 500);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+// Lights
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(50, 80, 30);
+dirLight.castShadow = true;
+dirLight.shadow.camera.left = -60;
+dirLight.shadow.camera.right = 60;
+dirLight.shadow.camera.top = 60;
+dirLight.shadow.camera.bottom = -60;
+dirLight.shadow.camera.near = 1;
+dirLight.shadow.camera.far = 200;
+dirLight.shadow.mapSize.width = 2048;
+dirLight.shadow.mapSize.height = 2048;
+scene.add(dirLight);
+
+// Ground plane (large green ground)
+const groundGeo = new THREE.PlaneGeometry(600, 2000);
+const groundMat = new THREE.MeshLambertMaterial({ color: 0x4a7c2e });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.05;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ===========================
+// CAR FACTORY
+// ===========================
+const carColors = [0xe53935, 0x43a047, 0xfdd835, 0xffffff, 0xff8f00, 0x8e24aa, 0x00acc1, 0x6d4c41];
+
+function createCarModel(color, type) {
+  const group = new THREE.Group();
+
+  if (type === 'police') {
+    // Police car body - black and white
+    const bodyGeo = new THREE.BoxGeometry(2.0, 0.8, 4.2);
+    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = 0.5;
+    body.castShadow = true;
+    group.add(body);
+
+    // White doors
+    const doorGeo = new THREE.BoxGeometry(2.05, 0.5, 1.5);
+    const doorMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const doors = new THREE.Mesh(doorGeo, doorMat);
+    doors.position.y = 0.55;
+    doors.position.z = -0.3;
+    group.add(doors);
+
+    // Cabin
+    const cabinGeo = new THREE.BoxGeometry(1.7, 0.6, 2.0);
+    const cabinMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+    const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+    cabin.position.y = 1.15;
+    cabin.position.z = -0.2;
+    cabin.castShadow = true;
+    group.add(cabin);
+
+    // Light bar
+    const barGeo = new THREE.BoxGeometry(1.6, 0.15, 0.4);
+    const barMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+    const bar = new THREE.Mesh(barGeo, barMat);
+    bar.position.y = 1.5;
+    bar.position.z = -0.2;
+    group.add(bar);
+
+    // Red light
+    const redLightGeo = new THREE.BoxGeometry(0.35, 0.2, 0.35);
+    const redLightMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const redLight = new THREE.Mesh(redLightGeo, redLightMat);
+    redLight.position.set(-0.45, 1.6, -0.2);
+    redLight.name = 'redLight';
+    group.add(redLight);
+
+    // Blue light
+    const blueLightGeo = new THREE.BoxGeometry(0.35, 0.2, 0.35);
+    const blueLightMat = new THREE.MeshBasicMaterial({ color: 0x0044ff });
+    const blueLight = new THREE.Mesh(blueLightGeo, blueLightMat);
+    blueLight.position.set(0.45, 1.6, -0.2);
+    blueLight.name = 'blueLight';
+    group.add(blueLight);
+
+  } else if (type === 'truck') {
+    // Truck body
+    const bodyGeo = new THREE.BoxGeometry(2.2, 1.6, 5.5);
+    const bodyMat = new THREE.MeshLambertMaterial({ color: color });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = 1.0;
+    body.castShadow = true;
+    group.add(body);
+
+    // Truck cabin
+    const cabinGeo = new THREE.BoxGeometry(2.2, 0.8, 1.8);
+    const cabinMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+    const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+    cabin.position.y = 2.15;
+    cabin.position.z = 1.5;
+    cabin.castShadow = true;
+    group.add(cabin);
+
+    // Taillights
+    const tlGeo = new THREE.BoxGeometry(0.3, 0.3, 0.1);
+    const tlMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    [-0.8, 0.8].forEach(x => {
+      const tl = new THREE.Mesh(tlGeo, tlMat);
+      tl.position.set(x, 0.7, -2.8);
+      group.add(tl);
+    });
+
+  } else {
+    // Standard car body
+    const bodyGeo = new THREE.BoxGeometry(2.0, 0.8, 4.2);
+    const bodyMat = new THREE.MeshLambertMaterial({ color: color });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = 0.5;
+    body.castShadow = true;
+    group.add(body);
+
+    // Cabin
+    const cabinGeo = new THREE.BoxGeometry(1.7, 0.6, 2.0);
+    const cabinMat = new THREE.MeshLambertMaterial({ color: type === 'player' ? 0x1565c0 : darkenColor(color, 0.7) });
+    const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+    cabin.position.y = 1.15;
+    cabin.position.z = -0.2;
+    cabin.castShadow = true;
+    group.add(cabin);
+
+    if (type === 'player') {
+      // Player accent stripe
+      const stripeGeo = new THREE.BoxGeometry(2.05, 0.15, 3.0);
+      const stripeMat = new THREE.MeshLambertMaterial({ color: 0x0288d1 });
+      const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+      stripe.position.y = 0.55;
+      group.add(stripe);
+    }
+
+    // Headlights
+    const hlGeo = new THREE.BoxGeometry(0.3, 0.2, 0.1);
+    const hlMat = new THREE.MeshBasicMaterial({ color: 0xffffcc });
+    [-0.7, 0.7].forEach(x => {
+      const hl = new THREE.Mesh(hlGeo, hlMat);
+      hl.position.set(x, 0.5, 2.15);
+      group.add(hl);
+    });
+
+    // Taillights
+    const tlGeo = new THREE.BoxGeometry(0.3, 0.2, 0.1);
+    const tlMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    [-0.7, 0.7].forEach(x => {
+      const tl = new THREE.Mesh(tlGeo, tlMat);
+      tl.position.set(x, 0.5, -2.15);
+      group.add(tl);
+    });
+  }
+
+  // Wheels for all types
+  const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 8);
+  const wheelMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+  const wheelPositions = type === 'truck'
+    ? [[-1.15, 0.35, 1.5], [1.15, 0.35, 1.5], [-1.15, 0.35, -1.8], [1.15, 0.35, -1.8]]
+    : [[-1.05, 0.35, 1.2], [1.05, 0.35, 1.2], [-1.05, 0.35, -1.2], [1.05, 0.35, -1.2]];
+
+  wheelPositions.forEach(pos => {
+    const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(pos[0], pos[1], pos[2]);
+    wheel.castShadow = true;
+    group.add(wheel);
+  });
+
+  return group;
+}
+
+function darkenColor(hex, factor) {
+  const r = ((hex >> 16) & 255) * factor;
+  const g = ((hex >> 8) & 255) * factor;
+  const b = (hex & 255) * factor;
+  return (r << 16) | (g << 8) | b;
+}
+
+// Create player car
+const playerCar = createCarModel(0x2196F3, 'player');
+scene.add(playerCar);
+
+// ===========================
+// ROAD MANAGEMENT
+// ===========================
+function createRoadSegment(zPos) {
+  const group = new THREE.Group();
+  group.position.z = zPos;
+
+  // Road surface
+  const roadGeo = new THREE.PlaneGeometry(CONFIG.roadWidth, CONFIG.segmentLength);
+  const roadMat = new THREE.MeshLambertMaterial({ color: 0x3a3a3a });
+  const road = new THREE.Mesh(roadGeo, roadMat);
+  road.rotation.x = -Math.PI / 2;
+  road.position.y = 0.01;
+  road.receiveShadow = true;
+  group.add(road);
+
+  // Road edges (white lines)
+  const edgeGeo = new THREE.PlaneGeometry(0.15, CONFIG.segmentLength);
+  const edgeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  [-CONFIG.roadWidth / 2, CONFIG.roadWidth / 2].forEach(x => {
+    const edge = new THREE.Mesh(edgeGeo, edgeMat);
+    edge.rotation.x = -Math.PI / 2;
+    edge.position.set(x, 0.02, 0);
+    group.add(edge);
+  });
+
+  // Center dashed line (yellow)
+  const dashGeo = new THREE.PlaneGeometry(0.12, 2.5);
+  const dashMat = new THREE.MeshBasicMaterial({ color: 0xffcc00 });
+  for (let z = -CONFIG.segmentLength / 2; z < CONFIG.segmentLength / 2; z += 5) {
+    const dash = new THREE.Mesh(dashGeo, dashMat);
+    dash.rotation.x = -Math.PI / 2;
+    dash.position.set(0, 0.02, z);
+    group.add(dash);
+  }
+
+  // Shoulder rumble strips
+  const stripGeo = new THREE.PlaneGeometry(0.6, 1.5);
+  const stripMat = new THREE.MeshBasicMaterial({ color: 0x666666 });
+  for (let z = -CONFIG.segmentLength / 2; z < CONFIG.segmentLength / 2; z += 4) {
+    [-CONFIG.roadWidth / 2 - 0.45, CONFIG.roadWidth / 2 + 0.45].forEach(x => {
+      const strip = new THREE.Mesh(stripGeo, stripMat);
+      strip.rotation.x = -Math.PI / 2;
+      strip.position.set(x, 0.015, z);
+      group.add(strip);
+    });
+  }
+
+  scene.add(group);
+  return group;
+}
+
+function createScenery(zPos) {
+  const objects = [];
+  const segLen = CONFIG.segmentLength;
+
+  for (let z = -segLen / 2; z < segLen / 2; z += 8 + Math.random() * 12) {
+    [-1, 1].forEach(side => {
+      if (Math.random() > 0.6) return;
+      const x = side * (CONFIG.roadWidth / 2 + 3 + Math.random() * 15);
+
+      if (Math.random() > 0.3) {
+        // Tree
+        const tree = new THREE.Group();
+        const trunkGeo = new THREE.CylinderGeometry(0.2, 0.3, 2, 6);
+        const trunkMat = new THREE.MeshLambertMaterial({ color: 0x5d4037 });
+        const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+        trunk.position.y = 1;
+        trunk.castShadow = true;
+        tree.add(trunk);
+
+        const leavesGeo = new THREE.ConeGeometry(1.5 + Math.random(), 3 + Math.random() * 2, 6);
+        const leavesColor = [0x2e7d32, 0x388e3c, 0x1b5e20][Math.floor(Math.random() * 3)];
+        const leavesMat = new THREE.MeshLambertMaterial({ color: leavesColor });
+        const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+        leaves.position.y = 3.5;
+        leaves.castShadow = true;
+        tree.add(leaves);
+
+        tree.position.set(x, 0, zPos + z);
+        scene.add(tree);
+        objects.push(tree);
+      } else {
+        // Bush
+        const bushGeo = new THREE.SphereGeometry(0.6 + Math.random() * 0.5, 6, 4);
+        const bushMat = new THREE.MeshLambertMaterial({ color: 0x33691e });
+        const bush = new THREE.Mesh(bushGeo, bushMat);
+        bush.position.set(x, 0.5, zPos + z);
+        bush.castShadow = true;
+        scene.add(bush);
+        objects.push(bush);
+      }
+    });
+  }
+  return objects;
+}
+
+function initRoad() {
+  for (let i = -1; i < CONFIG.visibleSegments; i++) {
+    const z = state.playerZ - i * CONFIG.segmentLength;
+    const seg = createRoadSegment(z);
+    state.roadSegments.push({ mesh: seg, z: z });
+    const scen = createScenery(z);
+    state.sceneryObjects.push({ objects: scen, z: z });
+  }
+}
+
+function updateRoad() {
+  const pz = state.playerZ;
+
+  state.roadSegments.forEach(seg => {
+    if (seg.z > pz + CONFIG.segmentLength * 1.5) {
+      seg.z -= CONFIG.visibleSegments * CONFIG.segmentLength;
+      seg.mesh.position.z = seg.z;
+    }
+  });
+
+  state.sceneryObjects.forEach((scen, i) => {
+    const correspondingZ = state.roadSegments[i] ? state.roadSegments[i].z : scen.z;
+    if (scen.z > pz + CONFIG.segmentLength * 1.5) {
+      // Remove old scenery
+      scen.objects.forEach(obj => scene.remove(obj));
+      // Create new scenery at new position
+      scen.z = correspondingZ;
+      const newObjects = createScenery(scen.z);
+      scen.objects = newObjects;
+    }
+  });
+}
+
+// ===========================
+// TRAFFIC MANAGEMENT
+// ===========================
+function spawnTrafficCar(lane) {
+  const isTruck = Math.random() > 0.75;
+  const color = carColors[Math.floor(Math.random() * carColors.length)];
+  const type = isTruck ? 'truck' : 'traffic';
+  const car = createCarModel(color, type);
+
+  const trafficData = {
+    mesh: car,
+    type: type,
+    lane: lane, // 'same' or 'oncoming'
+    width: isTruck ? 2.2 : 2.0,
+    length: isTruck ? 5.5 : 4.2,
+    scored: false,
+  };
+
+  if (lane === 'same') {
+    // Same direction: spawn ahead, moving slower
+    car.position.x = CONFIG.playerLaneX + (Math.random() - 0.5) * 0.5;
+    car.position.z = state.playerZ - CONFIG.trafficSpawnDistance - Math.random() * 40;
+    car.position.y = 0;
+    trafficData.speed = state.playerSpeed * (CONFIG.sameDirectionSpeedRatio + Math.random() * 0.2);
+  } else {
+    // Oncoming: spawn ahead in left lane, heading toward player
+    car.position.x = -CONFIG.playerLaneX + (Math.random() - 0.5) * 0.5;
+    car.position.z = state.playerZ - CONFIG.trafficSpawnDistance - Math.random() * 40;
+    car.position.y = 0;
+    car.rotation.y = Math.PI; // Facing opposite direction
+    trafficData.speed = state.playerSpeed * (CONFIG.oncomingSpeedRatio + Math.random() * 0.3);
+  }
+
+  scene.add(car);
+  state.trafficCars.push(trafficData);
+}
+
+function updateTraffic(dt) {
+  const difficulty = Math.min(1, state.elapsedTime / CONFIG.difficultyRampTime);
+  state.difficultyLevel = difficulty;
+
+  // Spawn timers
+  const sameInterval = CONFIG.trafficBaseInterval - (CONFIG.trafficBaseInterval - CONFIG.trafficMinInterval) * difficulty;
+  const oncomingInterval = CONFIG.oncomingBaseInterval - (CONFIG.oncomingBaseInterval - CONFIG.oncomingMinInterval) * difficulty;
+
+  state.sameTrafficTimer += dt;
+  state.oncomingTrafficTimer += dt;
+
+  if (state.sameTrafficTimer >= sameInterval) {
+    spawnTrafficCar('same');
+    state.sameTrafficTimer = 0;
+  }
+  if (state.oncomingTrafficTimer >= oncomingInterval) {
+    spawnTrafficCar('oncoming');
+    state.oncomingTrafficTimer = 0;
+  }
+
+  // Update positions & despawn
+  for (let i = state.trafficCars.length - 1; i >= 0; i--) {
+    const tc = state.trafficCars[i];
+
+    if (tc.lane === 'same') {
+      // Same direction: moves forward but slower
+      const relSpeed = (state.playerSpeed - tc.speed) / 3.6; // m/s relative
+      tc.mesh.position.z += relSpeed * dt; // Car appears to come toward player
+    } else {
+      // Oncoming: moves toward player quickly
+      const totalSpeed = (state.playerSpeed + tc.speed) / 3.6;
+      tc.mesh.position.z += totalSpeed * dt;
+    }
+
+    // Near-miss detection
+    if (!tc.scored) {
+      const dx = Math.abs(tc.mesh.position.x - state.playerX);
+      const dz = Math.abs(tc.mesh.position.z - state.playerZ);
+      if (dz < 3 && dx < CONFIG.nearMissDistance && dx > tc.width / 2 + 0.5) {
+        tc.scored = true;
+        state.nearMissCombo++;
+        const bonus = CONFIG.nearMissBonus * state.nearMissCombo;
+        state.score += bonus;
+        state.multiplier = 1 + state.nearMissCombo * 0.5;
+        state.multiplierTimer = 3;
+        showNearMiss(bonus);
+      }
+    }
+
+    // Despawn
+    if (tc.mesh.position.z > state.playerZ + CONFIG.trafficDespawnDistance) {
+      scene.remove(tc.mesh);
+      state.trafficCars.splice(i, 1);
+    }
+  }
+}
+
+function showNearMiss(bonus) {
+  const el = document.getElementById('hud-multiplier');
+  el.textContent = `NEAR MISS! +${bonus}`;
+  el.style.color = '#ff8a65';
+  setTimeout(() => {
+    if (state.multiplierTimer <= 0) el.textContent = '';
+  }, 1500);
+}
+
+// ===========================
+// POLICE SYSTEM
+// ===========================
+let policeCar = null;
+
+function createPoliceCar() {
+  policeCar = createCarModel(0, 'police');
+  policeCar.visible = false;
+  scene.add(policeCar);
+}
+
+function updatePolice(dt) {
+  if (state.playerSpeed < CONFIG.policeSpeedThreshold) {
+    state.slowTimer += dt;
+  } else {
+    state.slowTimer = Math.max(0, state.slowTimer - dt * 2);
+  }
+
+  // Warning phase
+  if (state.slowTimer >= CONFIG.policeWarningTime && !state.policeWarning) {
+    state.policeWarning = true;
+    document.getElementById('speed-warning').style.display = 'block';
+  } else if (state.slowTimer < CONFIG.policeWarningTime) {
+    state.policeWarning = false;
+    document.getElementById('speed-warning').style.display = 'none';
+  }
+
+  // Spawn police
+  if (state.slowTimer >= CONFIG.policeSpawnTime && !state.policeSpawned) {
+    state.policeSpawned = true;
+    state.policeActive = true;
+    state.policeZ = state.playerZ + 50;
+    policeCar.visible = true;
+    policeCar.position.x = CONFIG.playerLaneX;
+    policeCar.position.z = state.policeZ;
+    policeCar.position.y = 0;
+    document.getElementById('police-warning').style.display = 'block';
+  }
+
+  // Update police chase
+  if (state.policeActive && policeCar) {
+    // Police catches up
+    const catchSpeed = CONFIG.policeCatchUpSpeed + Math.max(0, (CONFIG.policeSpeedThreshold - state.playerSpeed) * 0.3);
+    state.policeZ -= catchSpeed * dt;
+
+    // Police steers toward player
+    const pxDiff = state.playerX - policeCar.position.x;
+    policeCar.position.x += pxDiff * 2 * dt;
+    policeCar.position.z = state.policeZ;
+
+    // Flash lights
+    state.policeLights += dt * 8;
+    const flash = Math.sin(state.policeLights) > 0;
+    const redLight = policeCar.getObjectByName('redLight');
+    const blueLight = policeCar.getObjectByName('blueLight');
+    if (redLight) redLight.material.color.setHex(flash ? 0xff0000 : 0x330000);
+    if (blueLight) blueLight.material.color.setHex(flash ? 0x0044ff : 0x000033);
+
+    // Police catches player
+    if (state.policeZ <= state.playerZ + CONFIG.policeCatchDistance) {
+      gameOver('Arrested by police!');
+      return;
+    }
+
+    // Player escapes if fast enough for a while
+    if (state.playerSpeed > CONFIG.policeSpeedThreshold + 40) {
+      state.policeZ += (state.playerSpeed - CONFIG.policeSpeedThreshold - 40) / 3.6 * dt;
+      if (state.policeZ > state.playerZ + 60) {
+        // Escaped
+        state.policeActive = false;
+        state.policeSpawned = false;
+        state.policeWarning = false;
+        state.slowTimer = 0;
+        policeCar.visible = false;
+        document.getElementById('police-warning').style.display = 'none';
+        document.getElementById('speed-warning').style.display = 'none';
+        state.score += 200;
+      }
+    }
+  }
+}
+
+// ===========================
+// COLLISION DETECTION
+// ===========================
+function checkCollisions() {
+  const px = state.playerX;
+  const pz = state.playerZ;
+  const pHalfW = CONFIG.carWidth / 2 - 0.1;
+  const pHalfL = CONFIG.carLength / 2 - 0.2;
+
+  for (const tc of state.trafficCars) {
+    const tx = tc.mesh.position.x;
+    const tz = tc.mesh.position.z;
+    const tHalfW = tc.width / 2;
+    const tHalfL = tc.length / 2;
+
+    if (Math.abs(px - tx) < (pHalfW + tHalfW) &&
+        Math.abs(pz - tz) < (pHalfL + tHalfL)) {
+      if (tc.lane === 'oncoming') {
+        gameOver('Head-on collision!');
+      } else {
+        gameOver('Rear-ended traffic!');
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+// ===========================
+// INPUT HANDLING
+// ===========================
+document.addEventListener('keydown', (e) => {
+  switch (e.code) {
+    case 'ArrowLeft': case 'KeyA': state.keys.left = true; break;
+    case 'ArrowRight': case 'KeyD': state.keys.right = true; break;
+    case 'ArrowUp': case 'KeyW': state.keys.up = true; break;
+    case 'ArrowDown': case 'KeyS': state.keys.down = true; break;
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  switch (e.code) {
+    case 'ArrowLeft': case 'KeyA': state.keys.left = false; break;
+    case 'ArrowRight': case 'KeyD': state.keys.right = false; break;
+    case 'ArrowUp': case 'KeyW': state.keys.up = false; break;
+    case 'ArrowDown': case 'KeyS': state.keys.down = false; break;
+  }
+});
+
+// Mobile controls
+function setupMobileButton(id, key) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('touchstart', (e) => { e.preventDefault(); state.keys[key] = true; });
+  el.addEventListener('touchend', (e) => { e.preventDefault(); state.keys[key] = false; });
+  el.addEventListener('touchcancel', (e) => { e.preventDefault(); state.keys[key] = false; });
+}
+setupMobileButton('m-left', 'left');
+setupMobileButton('m-right', 'right');
+setupMobileButton('m-up', 'up');
+setupMobileButton('m-down', 'down');
+
+// ===========================
+// SCREENS
+// ===========================
+document.getElementById('btn-start').addEventListener('click', startGame);
+document.getElementById('btn-restart').addEventListener('click', startGame);
+
+function startGame() {
+  // Reset state
+  state.playerX = CONFIG.playerLaneX;
+  state.playerZ = 0;
+  state.playerSpeed = CONFIG.playerStartSpeed;
+  state.topSpeed = 0;
+  state.distance = 0;
+  state.score = 0;
+  state.multiplier = 1;
+  state.multiplierTimer = 0;
+  state.nearMissCombo = 0;
+  state.sameTrafficTimer = 0;
+  state.oncomingTrafficTimer = 0;
+  state.policeActive = false;
+  state.policeWarning = false;
+  state.policeSpawned = false;
+  state.slowTimer = 0;
+  state.elapsedTime = 0;
+  state.difficultyLevel = 0;
+  state.keys = { left: false, right: false, up: false, down: false };
+  state.lastTime = performance.now();
+
+  // Clear existing
+  state.trafficCars.forEach(tc => scene.remove(tc.mesh));
+  state.trafficCars = [];
+  state.roadSegments.forEach(seg => scene.remove(seg.mesh));
+  state.roadSegments = [];
+  state.sceneryObjects.forEach(scen => scen.objects.forEach(obj => scene.remove(obj)));
+  state.sceneryObjects = [];
+
+  if (policeCar) policeCar.visible = false;
+
+  // Init road
+  initRoad();
+
+  // Init police car
+  if (!policeCar) createPoliceCar();
+  state.policeLights = 0;
+
+  // Update UI
+  document.getElementById('start-screen').classList.add('hidden');
+  document.getElementById('game-over-screen').classList.add('hidden');
+  document.getElementById('hud').style.display = 'block';
+  document.getElementById('police-warning').style.display = 'none';
+  document.getElementById('speed-warning').style.display = 'none';
+  document.getElementById('hud-multiplier').textContent = '';
+
+  state.gameState = 'playing';
+
+  // Update ground position
+  ground.position.z = state.playerZ;
+}
+
+function gameOver(cause) {
+  state.gameState = 'gameover';
+
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('police-warning').style.display = 'none';
+  document.getElementById('speed-warning').style.display = 'none';
+
+  const isArrested = cause.includes('Arrested');
+  document.getElementById('game-over-screen').querySelector('h1').textContent = isArrested ? 'BUSTED' : 'WRECKED';
+  document.getElementById('game-over-cause').textContent = cause;
+  document.getElementById('final-distance').textContent = Math.floor(state.distance) + ' m';
+  document.getElementById('final-speed').textContent = Math.floor(state.topSpeed) + ' km/h';
+  document.getElementById('final-score').textContent = Math.floor(state.score);
+
+  document.getElementById('game-over-screen').classList.remove('hidden');
+}
+
+// ===========================
+// GAME LOOP
+// ===========================
+function gameLoop(timestamp) {
+  requestAnimationFrame(gameLoop);
+
+  if (state.gameState !== 'playing') {
+    renderer.render(scene, camera);
+    return;
+  }
+
+  const dt = Math.min((timestamp - state.lastTime) / 1000, 0.05);
+  state.lastTime = timestamp;
+  state.elapsedTime += dt;
+
+  // --- Player speed ---
+  if (state.keys.up) {
+    state.playerSpeed += CONFIG.playerAcceleration * dt;
+  } else if (state.keys.down) {
+    state.playerSpeed -= CONFIG.playerBrakeForce * dt;
+  } else {
+    // Gradual deceleration (air resistance/engine idle)
+    state.playerSpeed -= 5 * dt;
+  }
+  state.playerSpeed = Math.max(20, Math.min(CONFIG.playerMaxSpeed, state.playerSpeed));
+  state.topSpeed = Math.max(state.topSpeed, state.playerSpeed);
+
+  // --- Player steering ---
+  if (state.keys.left) {
+    state.playerX -= CONFIG.playerSteerSpeed * dt;
+  }
+  if (state.keys.right) {
+    state.playerX += CONFIG.playerSteerSpeed * dt;
+  }
+  state.playerX = Math.max(CONFIG.playerMinX, Math.min(CONFIG.playerMaxX, state.playerX));
+
+  // Off-road slowdown
+  if (Math.abs(state.playerX) > CONFIG.roadWidth / 2 + 0.5) {
+    state.playerSpeed -= 30 * dt;
+    // Add slight wobble when off-road
+    state.playerX += (Math.random() - 0.5) * 0.05;
+  }
+
+  // --- Move player forward ---
+  const speedMs = state.playerSpeed / 3.6;
+  state.playerZ -= speedMs * dt;
+  state.distance += speedMs * dt;
+
+  // --- Score ---
+  state.score += state.playerSpeed * CONFIG.speedScoreMultiplier * state.multiplier * dt;
+  state.multiplierTimer -= dt;
+  if (state.multiplierTimer <= 0) {
+    state.multiplier = 1;
+    state.nearMissCombo = 0;
+  }
+
+  // --- Update systems ---
+  updateRoad();
+  updateTraffic(dt);
+  updatePolice(dt);
+  if (checkCollisions()) {
+    renderer.render(scene, camera);
+    return;
+  }
+
+  // --- Update player car ---
+  playerCar.position.x = state.playerX;
+  playerCar.position.z = state.playerZ;
+  playerCar.position.y = 0;
+
+  // Slight tilt when steering
+  const targetTilt = (state.keys.left ? 0.05 : 0) + (state.keys.right ? -0.05 : 0);
+  playerCar.rotation.z += (targetTilt - playerCar.rotation.z) * 5 * dt;
+
+  // --- Update camera ---
+  const camTargetX = state.playerX * 0.4;
+  const camTargetZ = state.playerZ + 10 + state.playerSpeed * 0.015;
+  const camTargetY = 4 + state.playerSpeed * 0.008;
+
+  camera.position.x += (camTargetX - camera.position.x) * 3 * dt;
+  camera.position.y += (camTargetY - camera.position.y) * 3 * dt;
+  camera.position.z += (camTargetZ - camera.position.z) * 3 * dt;
+
+  camera.lookAt(state.playerX * 0.7, 1.0, state.playerZ - 20);
+
+  // Speed-based FOV
+  const targetFov = 65 + state.playerSpeed * 0.05;
+  camera.fov += (targetFov - camera.fov) * 2 * dt;
+  camera.updateProjectionMatrix();
+
+  // --- Update ground ---
+  ground.position.z = state.playerZ;
+
+  // --- Update shadow light to follow player ---
+  dirLight.position.set(state.playerX + 50, 80, state.playerZ - 30);
+  dirLight.target.position.set(state.playerX, 0, state.playerZ);
+  dirLight.target.updateMatrixWorld();
+
+  // --- Update HUD ---
+  document.getElementById('hud-speed').textContent = Math.floor(state.playerSpeed) + ' km/h';
+  document.getElementById('hud-score').textContent = Math.floor(state.score);
+  document.getElementById('hud-distance').textContent = Math.floor(state.distance) + ' m';
+
+  if (state.multiplier > 1) {
+    document.getElementById('hud-multiplier').textContent = `x${state.multiplier.toFixed(1)} COMBO`;
+  }
+
+  // Speed color indicator
+  const speedEl = document.getElementById('hud-speed');
+  if (state.playerSpeed < CONFIG.policeSpeedThreshold) {
+    speedEl.style.color = '#ff5252';
+  } else if (state.playerSpeed > 180) {
+    speedEl.style.color = '#ff8a65';
+  } else {
+    speedEl.style.color = '#4fc3f7';
+  }
+
+  renderer.render(scene, camera);
+}
+
+// ===========================
+// RESIZE HANDLER
+// ===========================
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ===========================
+// START
+// ===========================
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
